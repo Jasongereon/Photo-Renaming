@@ -1,15 +1,20 @@
-import System.Directory
-import System.FilePath
-import Data.Time.Format
-import Data.Time.Clock
+import System.Directory (
+    listDirectory, doesFileExist, doesDirectoryExist,
+    getModificationTime, renameFile )
+import System.FilePath ( takeDirectory, takeBaseName, takeExtension )
+import Data.Time.Format ( formatTime, defaultTimeLocale )
+import System.Environment ( getArgs )
+import Data.Foldable ( traverse_ )
+import System.Exit ( exitFailure, exitSuccess )
 
 allFiles ::  FilePath -> IO [FilePath]
 allFiles path = do
     paths <- filter (\p -> p /= "." && p /= "..") . ((\p -> path ++ "/" ++ p) <$>) <$> listDirectory path
-    filesExistances <- traverse doesFileExist paths
-    let files = map fst $ filter snd $ zip paths filesExistances
-    foldersExistances <- traverse doesDirectoryExist paths
-    let folders = map fst $ filter snd $ zip paths foldersExistances
+    filesExistences <- traverse doesFileExist paths
+    foldersExistences <- traverse doesDirectoryExist paths
+
+    let files = map fst $ filter snd $ zip paths filesExistences
+    let folders = map fst $ filter snd $ zip paths foldersExistences
 
     innerFoldersFiles <- traverse allFiles folders
 
@@ -22,15 +27,32 @@ prependModificationTime path = do
     let extension = takeExtension path
 
     modificationTime <- getModificationTime path
-    let modificationTimeString = formatTime defaultTimeLocale "%Y%m%d-%H%M%S-" modificationTime
     
+    let modificationTimeString = formatTime defaultTimeLocale "%Y%m%d-%H%M%S-" modificationTime
     let newPath = directory ++ "/" ++ modificationTimeString ++ baseName ++ extension
 
     renameFile path newPath
     putStrLn $ "Renaming: " ++ path
 
-imagePath :: String
-imagePath = "C:/Users/Jasongereon/Desktop/Y2"
+main :: IO ()
+main = do
+    args <- getArgs
 
-main :: IO [()]
-main = allFiles imagePath >>= traverse prependModificationTime
+    if length args /= 1 then do
+        putStrLn "Missing folder path."
+        exitFailure
+
+    else do
+        let [path] = args
+        let slashPath = (\c -> if c == '\\' then '/' else c) <$> path
+
+        exists <- doesDirectoryExist slashPath
+
+        if not exists then do
+            putStrLn "Folder does not exist."
+            exitFailure
+
+        else do
+            putStrLn slashPath
+            allFiles slashPath >>= traverse_ prependModificationTime
+            exitSuccess
